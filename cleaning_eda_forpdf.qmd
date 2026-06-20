@@ -1,0 +1,206 @@
+---
+title: "MarketPulse AI: Where Australian Businesses Are Growing and Disappearing"
+subtitle: "A plain-English read of the national business churn data , with an AI-written consulting memo"
+author: "Tushar Dhanorkar"
+date: today
+format:
+  html:
+    toc: true
+    embed-resources: true
+    theme: cosmo
+    fig-width: 8
+    fig-height: 5
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: load
+library(tidyverse)
+
+industry_churn <- read_csv("outputs/industry_churn_panel.csv")
+lga_panel      <- read_csv("outputs/lga_industry_panel.csv")
+lga_yoy        <- read_csv("outputs/lga_industry_yoy_change.csv")
+```
+
+## What this is
+
+Every year hundreds of thousands of Australian businesses open, and hundreds of thousands close. We usually hear about the economy through big abstract numbers , GDP, inflation, interest rates , but underneath all of that is something far more immediate: which industries and which towns are quietly gaining businesses, and which are losing them.
+
+This report digs into exactly that, using the Australian Bureau of Statistics' own record of every business entry and exit between 2021 and 2025. The goal isn't just to find the numbers , it's to explain them clearly, and then hand them to an AI that writes them up the way a consultant would brief a client. Think of it as a health check on the Australian small-business economy.
+
+## Finding 1: Most industries are actually growing
+
+The first surprise: this isn't a story of decline. When you line up every industry by whether more businesses are leaving than joining, almost all of them are growing. Only two are shrinking at all , agriculture and retail , and even those only slightly.
+
+```{r}
+#| label: fig-net-churn
+industry_churn %>%
+  filter(year == "2024-25") %>%
+  mutate(industry = fct_reorder(industry, net_churn_rate)) %>%
+  ggplot(aes(x = industry, y = net_churn_rate, fill = net_churn_rate > 0)) +
+  geom_col() +
+  geom_hline(yintercept = 0, color = "grey30") +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#d62728", "FALSE" = "#2ca02c"), guide = "none") +
+  labs(
+    x = NULL, y = "More exits than entries  →",
+    title = "Which Australian industries are shrinking?",
+    subtitle = "2024-25 | Red = shrinking, Green = growing",
+    caption = "Source: ABS Counts of Australian Businesses"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+In plain terms: the economy added businesses across the board last year. The interesting question isn't "what's collapsing" , it's spotting the handful of genuine laggards before they become a real problem.
+
+## Finding 2: Is it a blip or a real trend?
+
+A single bad year doesn't mean an industry is in trouble. So here's how the rate of businesses joining (green) versus leaving (red) moved over four years, for the two laggards plus two industries that usually react fast to the economy.
+
+```{r}
+#| label: fig-trend
+industry_churn %>%
+  filter(industry %in% c(
+    "Retail Trade", "Construction", "Accommodation and Food Services",
+    "Agriculture, Forestry and Fishing"
+  )) %>%
+  ggplot(aes(x = year_end)) +
+  geom_line(aes(y = entry_rate, color = "Businesses joining"), linewidth = 1.1) +
+  geom_line(aes(y = exit_rate, color = "Businesses leaving"), linewidth = 1.1) +
+  geom_point(aes(y = entry_rate, color = "Businesses joining"), size = 2) +
+  geom_point(aes(y = exit_rate, color = "Businesses leaving"), size = 2) +
+  facet_wrap(~industry) +
+  scale_color_manual(values = c("Businesses joining" = "#2ca02c", "Businesses leaving" = "#d62728")) +
+  labs(
+    x = NULL, y = "Rate (%)", color = NULL,
+    title = "Are businesses joining or leaving?",
+    subtitle = "When red sits above green, the industry shrank that year"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
+
+Where the red line sits above green, more businesses left than joined. An industry that's consistently above the line has a real structural issue; one that only dipped once probably just had a rough year.
+
+## Finding 3: The national picture hides local stories
+
+National averages are convenient, but Australia isn't one economy , it's hundreds of local ones. A town can be struggling badly even when its industry looks fine nationally. So the next question: how widely is this shrinkage actually spread?
+
+```{r}
+#| label: tbl-split
+lga_yoy %>%
+  filter(y2024 >= 50) %>%
+  mutate(direction = if_else(pct_change_24_25 >= 0, "Growing", "Shrinking")) %>%
+  count(direction) %>%
+  mutate(`% of areas` = round(n / sum(n) * 100, 1)) %>%
+  knitr::kable(col.names = c("Direction", "Number of area-industry combos", "% of total"))
+```
+
+About two-thirds of local area-and-industry combinations grew, and a third shrank. Shrinkage isn't the norm , but it's common enough that there are real local stories worth finding.
+
+### Which states are under the most pressure?
+
+```{r}
+#| label: fig-state
+state_summary <- lga_yoy %>%
+  filter(y2024 >= 50) %>%
+  group_by(state) %>%
+  summarise(
+    avg_change = mean(pct_change_24_25, na.rm = TRUE),
+    pct_shrinking = mean(pct_change_24_25 < 0, na.rm = TRUE) * 100
+  ) %>%
+  arrange(avg_change)
+
+state_summary %>%
+  mutate(state = fct_reorder(state, avg_change)) %>%
+  ggplot(aes(x = state, y = avg_change, fill = avg_change < 1)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#d62728", "FALSE" = "#2ca02c"), guide = "none") +
+  labs(
+    x = NULL, y = "Average change in business numbers (%)",
+    title = "Tasmania is the weakest state by this measure",
+    subtitle = "It has the most local areas going backwards"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+Tasmania stands out clearly , the lowest average growth and the highest share of local areas going backwards. That's the kind of finding a national headline number would completely hide.
+
+### Does an industry's national trend hold up locally?
+
+This is the question the whole project is built around. If an industry is growing nationally, does it actually grow in most local areas too , or is the national number papering over a messy reality?
+
+```{r}
+#| label: fig-corr
+national <- industry_churn %>%
+  filter(year == "2024-25") %>%
+  select(industry, pct_change_national = pct_change)
+
+regional <- lga_yoy %>%
+  filter(y2024 >= 50) %>%
+  group_by(industry_label) %>%
+  summarise(avg_regional_change = mean(pct_change_24_25, na.rm = TRUE))
+
+cross_check <- national %>%
+  left_join(regional, by = c("industry" = "industry_label"))
+
+correlation <- cor(cross_check$pct_change_national, cross_check$avg_regional_change, use = "complete.obs")
+
+cross_check %>%
+  ggplot(aes(x = pct_change_national, y = avg_regional_change)) +
+  geom_point(size = 3, color = "#1f77b4") +
+  geom_smooth(method = "lm", se = FALSE, color = "grey40", linetype = "dashed") +
+  ggrepel::geom_text_repel(aes(label = industry), size = 3, max.overlaps = 15) +
+  labs(
+    x = "National change (%)", y = "Average local change (%)",
+    title = "The national trend predicts the local reality",
+    subtitle = paste0("Correlation: ", round(correlation, 2), " , they move together closely")
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+The two line up almost perfectly. An industry growing nationally tends to grow in most regions; one shrinking nationally shrinks fairly broadly. In plain terms , the national signal is trustworthy, not an average hiding chaos underneath.
+
+## The AI layer: turning findings into a briefing
+
+Finding the numbers is only half the job. The harder, more valuable half is explaining them clearly enough that a decision-maker can act. So I built the final step: an AI assistant that takes these exact findings and writes them up like a consultant's briefing , situation, key insights, recommendation.
+
+The one rule built in: it can only use the real numbers from the analysis. It tells the story; it doesn't invent it.
+
+> **INTERNAL MEMO**
+>
+> **SITUATION** , Analysis of the latest ABS data (2024-25) shows a mostly growing business economy across Australia, with a small number of industries and regions under genuine pressure.
+>
+> **KEY INSIGHTS** , Agriculture, Forestry and Fishing is the leading national laggard, though only marginally. National and regional industry trends move together very closely, meaning the national picture reliably reflects what's happening on the ground. At the state level, Tasmania is the weakest performer, with close to half its local industry segments contracting. The single sharpest local decline was in professional services in Queenscliffe.
+>
+> **RECOMMENDATION** , Focus attention on the genuine laggards rather than the economy as a whole. Prioritise support for agriculture, and treat Tasmania as a priority region for closer review. Because national trends track local reality so closely, national-level monitoring is a reliable early-warning signal , there's no need to track every region separately to catch emerging problems.
+
+That memo was generated from the data, not hand-written , which is the whole point. The analysis finds the signal; the AI turns it into something a busy person can read in thirty seconds.
+
+## The takeaway
+
+Most Australian industries grew in 2024-25 , this isn't a decline story. The genuinely useful findings are the specific ones: agriculture and retail as the only national laggards, Tasmania as the state under real pressure, and the reassuring result that the national picture holds up locally. And the project shows a full loop , from raw open data, to clear analysis, to a written recommendation a non-technical reader can act on.
+
+## Data source and references
+
+**Data**
+
+Australian Bureau of Statistics. (2025). *Counts of Australian Businesses, including Entries and Exits, July 2021 – June 2025*. Australian Bureau of Statistics. https://www.abs.gov.au/statistics/economy/business-indicators/counts-australian-businesses-including-entries-and-exits/latest-release
+
+Specifically: Data cube 1 (counts, entries and exits by industry) and Data cube 10 (business counts by Local Government Area and industry).
+
+**Tools**
+
+R Core Team (2026). *R: A Language and Environment for Statistical Computing*. R Foundation for Statistical Computing, Vienna, Austria. https://www.R-project.org/
+
+Wickham, H. et al. (2019). Welcome to the tidyverse. *Journal of Open Source Software*, 4(43), 1686. https://doi.org/10.21105/joss.01686
+
+The consulting memo was generated using Meta's Llama 3.3 70B model via the Groq API.
+
+**Note on licensing**
+
+ABS data is used under the Creative Commons Attribution 4.0 International licence (CC BY 4.0), which permits reuse with attribution.

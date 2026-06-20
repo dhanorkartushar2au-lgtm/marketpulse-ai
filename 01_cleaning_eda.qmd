@@ -393,3 +393,23 @@ cat(memo)
 **KEY INSIGHTS**: Notably, Agriculture, Forestry and Fishing is the top national laggard with a net churn rate of 0.8, indicating more exits than entries. Furthermore, our analysis shows a strong correlation between national and regional industry trends, with a correlation coefficient of -0.9. This suggests that national trends are reflected at the local level. At the state level, Tasmania is the weakest performer, with an average change of 0.2% and 49% of its industry-region combinations experiencing decline. The sharpest single regional decline was observed in Professional, Scientific and Technical Services in Queenscliffe, which contracted by 21.6%.
 
 **RECOMMENDATION**: Given these findings, I recommend that we prioritize support for the Agriculture, Forestry and Fishing sector, as well as targeted interventions in Tasmania and regions like Queenscliffe. By focusing on these areas, we can help mitigate the impact of decline and promote more balanced growth across industries and regions. I suggest we discuss these recommendations further to determine the best course of action for our clients and stakeholders.
+
+## Data source and references
+
+**Data**
+
+Australian Bureau of Statistics. (2025). *Counts of Australian Businesses, including Entries and Exits, July 2021 – June 2025*. Australian Bureau of Statistics. https://www.abs.gov.au/statistics/economy/business-indicators/counts-australian-businesses-including-entries-and-exits/latest-release
+
+Specifically: Data cube 1 (counts, entries and exits by industry) and Data cube 10 (business counts by Local Government Area and industry).
+
+**Tools**
+
+R Core Team (2026). *R: A Language and Environment for Statistical Computing*. R Foundation for Statistical Computing, Vienna, Austria. https://www.R-project.org/
+
+Wickham, H. et al. (2019). Welcome to the tidyverse. *Journal of Open Source Software*, 4(43), 1686. https://doi.org/10.21105/joss.01686
+
+The consulting memo was generated using Meta's Llama 3.3 70B model via the Groq API.
+
+**Note on licensing**
+
+ABS data is used under the Creative Commons Attribution 4.0 International licence (CC BY 4.0), which permits reuse with attribution.
