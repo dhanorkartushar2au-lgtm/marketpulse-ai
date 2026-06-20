@@ -45,17 +45,17 @@ The key design choice: **the model only receives the real figures the analysis p
 ## Repository structure
 marketpulse-ai/
 
-├── 01_cleaning_eda.qmd      # Full analysis + AI memo (technical)
+|--  01_cleaning_eda.qmd      # Full analysis + AI memo (technical)
 
-├── 02_report.qmd            # Reader-facing report (no code)
+|-- 02_report.qmd            # Reader-facing report (no code)
 
-├── data/                    # Raw ABS data cubes
+|--  data/                    # Raw ABS data cubes
 
-│   ├── 8165DC01.xlsx        # Industry-level entries/exits
+│   |--  8165DC01.xlsx        # Industry-level entries/exits
 
-│   └── 8165DC10.xlsx        # Business counts by LGA
+│   |--  8165DC10.xlsx        # Business counts by LGA
 
-└── outputs/                 # Cleaned CSVs (generated on render)
+|--  outputs/                 # Cleaned CSVs (generated on render)
 
 
 ## How to run it
