@@ -107,3 +107,33 @@ industry_churn %>%
 ```
 
 The standout is **`r top_shrinking$industry`**, with a net churn rate of `r round(top_shrinking$net_churn_rate, 1)` percentage points — meaning exits are outpacing entries by a meaningful margin. That's worth flagging on its own, but the more useful question is *why*. Is this seasonal, cyclical, or a structural shift in how that industry operates? The trend chart below starts to answer that.
+
+## Finding #2: Is this a blip or a trend?
+
+A single bad year doesn't necessarily mean an industry is in trouble — it could just be noise. So instead of looking at one snapshot, here's how entry and exit rates have actually moved across all four years for a few industries worth watching: two that are usually treated as economic bellwethers (construction, retail), and two that were hit hardest during COVID (hospitality, transport) — to see if that disruption is still showing up.
+
+```{r}
+#| label: fig-entry-exit-trend
+#| fig-cap: "Entry and exit rates over time, selected industries"
+industry_churn %>%
+  filter(industry %in% c(
+    "Retail Trade", "Construction", "Accommodation and Food Services",
+    "Transport, Postal and Warehousing"
+  )) %>%
+  ggplot(aes(x = year_end)) +
+  geom_line(aes(y = entry_rate, color = "Entry rate"), linewidth = 1.1) +
+  geom_line(aes(y = exit_rate, color = "Exit rate"), linewidth = 1.1) +
+  geom_point(aes(y = entry_rate, color = "Entry rate"), size = 2) +
+  geom_point(aes(y = exit_rate, color = "Exit rate"), size = 2) +
+  facet_wrap(~industry) +
+  scale_color_manual(values = c("Entry rate" = "#2ca02c", "Exit rate" = "#d62728")) +
+  labs(
+    x = "Year (ending)", y = "Rate (%)", color = NULL,
+    title = "Entry vs exit rates, 2022-2025",
+    subtitle = "Where the red line sits above green, the industry is contracting that year"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "top")
+```
+
+Wherever the red (exit) line crosses above the green (entry) line, that industry shrank that year. Worth noting which of these four are consistently above the line versus which only dipped once — that distinction is exactly what separates a genuine structural problem from a one-off shock.
