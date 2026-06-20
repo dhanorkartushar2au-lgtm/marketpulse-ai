@@ -1,0 +1,27 @@
+---
+title: "MarketPulse AI: Business Exit Risk Analysis"
+subtitle: "Data Cleaning & Exploratory Analysis"
+author: "Tushar Dhanorkar"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+## Overview
+
+This document cleans and explores the ABS **Counts of Australian Businesses, including Entries and Exits** dataset. The goal is to identify which industries and regions show the highest "churn" (business exit risk) and lay the groundwork for the AI-augmented consulting memo generator.
+
+**Data source:** Australian Bureau of Statistics, Counts of Australian Businesses, including Entries and Exits, July 2021 – June 2025.
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(readxl)
+```
