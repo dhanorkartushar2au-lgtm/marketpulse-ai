@@ -14,14 +14,96 @@ execute:
   message: false
 ---
 
-## Overview
+## The Overview
 
-This document cleans and explores the ABS **Counts of Australian Businesses, including Entries and Exits** dataset. The goal is to identify which industries and regions show the highest "churn" (business exit risk) and lay the groundwork for the AI-augmented consulting memo generator.
+Every year, hundreds of thousands of Australian businesses open their doors — and hundreds of thousands close them. Most of the conversation around the economy focuses on big headline numbers like GDP or unemployment, but there's a much more immediate signal hiding underneath: **which industries and regions are quietly shedding businesses faster than they're gaining them.**
 
-**Data source:** Australian Bureau of Statistics, Counts of Australian Businesses, including Entries and Exits, July 2021 – June 2025.
+That's the question this project tries to answer, using the Australian Bureau of Statistics' own record of every business entry and exit in the country between 2021 and 2025. Think of it as a "health check" for the small business economy — the kind of analysis a consulting firm might run for a client deciding where to expand, or for a policymaker trying to figure out which regions need support.
+
+By the end of this, the goal is to have:
+
+1.  A clear picture of which industries are structurally shrinking (more exits than entries) versus which are genuinely growing
+2.  A regional lens — because national averages hide a lot, and a struggling industry nationally might be thriving in one specific area
+3.  An AI layer that takes these findings and writes them up the way a consulting analyst would for a client
+
+**Data source:** Australian Bureau of Statistics, *Counts of Australian Businesses, including Entries and Exits*, July 2021 – June 2025.
 
 ```{r}
 #| label: setup
 library(tidyverse)
 library(readxl)
 ```
+
+## Part 1: Industry-level churn (national)
+
+The raw file stacks each financial year as a labelled block of 21 industry rows. We reshape this into a tidy panel: one row per industry per year.
+
+```{r}
+#| label: clean-industry-data
+raw <- read_excel(
+  "data/8165DC01.xlsx",
+  sheet = "Table 1",
+  col_names = FALSE
+)
+
+col_names <- c(
+  "industry",
+  "operating_start", "entries_births", "entries_other", "entries_total",
+  "exits_cancellations", "exits_other", "exits_total",
+  "operating_end", "change", "pct_change", "entry_rate", "exit_rate"
+)
+
+year_rows <- which(str_detect(raw[[1]], "^\\d{4}-\\d{2}$"))
+
+clean_year_block <- function(start_row, raw_data) {
+  year_label <- raw_data[[1]][start_row]
+  block <- raw_data[(start_row + 1):(start_row + 21), 1:13]
+  colnames(block) <- col_names
+  block %>%
+    mutate(year = year_label, .before = 1) %>%
+    mutate(across(operating_start:exit_rate, as.numeric))
+}
+
+industry_churn <- map_dfr(year_rows, clean_year_block, raw_data = raw) %>%
+  filter(industry != "All Industries", industry != "Currently Unknown") %>%
+  mutate(
+    year_end = as.numeric(str_sub(year, 1, 4)) + 1,
+    net_churn_rate = exit_rate - entry_rate
+  ) %>%
+  relocate(year_end, .after = year)
+
+industry_churn
+```
+
+What this gives us is one row per industry per financial year, with the raw counts of businesses entering and exiting, plus ABS's own entry rate and exit rate percentages. From here, the question becomes: **for each industry, is the exit rate outrunning the entry rate?** If it is, that industry is contracting — more businesses are closing than new ones are opening to replace them. I'm calling that gap the **net churn rate**.
+
+## Finding #1: Who's actually shrinking?
+
+Looking at the most recent year (2024-25), here's how every industry stacks up. Red bars are industries where exits are outpacing entries — genuinely contracting. Green bars are growing.
+
+```{r}
+#| label: fig-net-churn-2025
+#| fig-cap: "Net churn rate by industry, 2024-25 (positive = shrinking)"
+top_shrinking <- industry_churn %>%
+  filter(year == "2024-25") %>%
+  arrange(desc(net_churn_rate)) %>%
+  slice(1)
+
+industry_churn %>%
+  filter(year == "2024-25") %>%
+  mutate(industry = fct_reorder(industry, net_churn_rate)) %>%
+  ggplot(aes(x = industry, y = net_churn_rate, fill = net_churn_rate > 0)) +
+  geom_col() +
+  geom_hline(yintercept = 0, color = "grey30") +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#d62728", "FALSE" = "#2ca02c"), guide = "none") +
+  labs(
+    x = NULL, y = "Net churn rate (exit % − entry %)",
+    title = "Which Australian industries are shrinking?",
+    subtitle = "2024-25 financial year | Red = more exits than entries",
+    caption = "Source: ABS Counts of Australian Businesses, Entries and Exits"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+The standout is **`r top_shrinking$industry`**, with a net churn rate of `r round(top_shrinking$net_churn_rate, 1)` percentage points — meaning exits are outpacing entries by a meaningful margin. That's worth flagging on its own, but the more useful question is *why*. Is this seasonal, cyclical, or a structural shift in how that industry operates? The trend chart below starts to answer that.
