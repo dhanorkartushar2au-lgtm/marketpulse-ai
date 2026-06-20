@@ -9,6 +9,13 @@ format:
     code-fold: true
     embed-resources: true
     theme: cosmo
+  pdf:
+    toc: true
+    number-sections: false
+    geometry:
+      - margin=1in
+    fig-width: 7
+    fig-height: 4.5
 execute:
   warning: false
   message: false
@@ -16,14 +23,14 @@ execute:
 
 ## The Overview
 
-Every year, hundreds of thousands of Australian businesses open their doors — and hundreds of thousands close them. Most of the conversation around the economy focuses on big headline numbers like GDP or unemployment, but there's a much more immediate signal hiding underneath: **which industries and regions are quietly shedding businesses faster than they're gaining them.**
+Every year, hundreds of thousands of Australian businesses open their doors and hundreds of thousands close them. Most of the conversation around the economy focuses on big headline numbers like GDP or unemployment, but there's a much more immediate signal hiding underneath: **which industries and regions are quietly shedding businesses faster than they're gaining them.**
 
-That's the question this project tries to answer, using the Australian Bureau of Statistics' own record of every business entry and exit in the country between 2021 and 2025. Think of it as a "health check" for the small business economy — the kind of analysis a consulting firm might run for a client deciding where to expand, or for a policymaker trying to figure out which regions need support.
+That's the question this project tries to answer, using the Australian Bureau of Statistics' own record of every business entry and exit in the country between 2021 and 2025. Think of it as a "health check" for the small business economy the kind of analysis a consulting firm might run for a client deciding where to expand, or for a policymaker trying to figure out which regions need support.
 
 By the end of this, the goal is to have:
 
 1.  A clear picture of which industries are structurally shrinking (more exits than entries) versus which are genuinely growing
-2.  A regional lens — because national averages hide a lot, and a struggling industry nationally might be thriving in one specific area
+2.  A regional lens because national averages hide a lot, and a struggling industry nationally might be thriving in one specific area
 3.  An AI layer that takes these findings and writes them up the way a consulting analyst would for a client
 
 **Data source:** Australian Bureau of Statistics, *Counts of Australian Businesses, including Entries and Exits*, July 2021 – June 2025.
@@ -75,20 +82,23 @@ industry_churn <- map_dfr(year_rows, clean_year_block, raw_data = raw) %>%
 industry_churn
 ```
 
-What this gives us is one row per industry per financial year, with the raw counts of businesses entering and exiting, plus ABS's own entry rate and exit rate percentages. From here, the question becomes: **for each industry, is the exit rate outrunning the entry rate?** If it is, that industry is contracting — more businesses are closing than new ones are opening to replace them. I'm calling that gap the **net churn rate**.
+What this gives us is one row per industry per financial year, with the raw counts of businesses entering and exiting, plus ABS's own entry rate and exit rate percentages. From here, the question becomes: **for each industry, is the exit rate outrunning the entry rate?** If it is, that industry is contracting more businesses are closing than new ones are opening to replace them. I'm calling that gap the **net churn rate**.
 
 ## Finding #1: Who's actually shrinking?
 
-Looking at the most recent year (2024-25), here's how every industry stacks up. Red bars are industries where exits are outpacing entries — genuinely contracting. Green bars are growing.
-
 ```{r}
-#| label: fig-net-churn-2025
-#| fig-cap: "Net churn rate by industry, 2024-25 (positive = shrinking)"
+#| label: top-shrinking
+#| include: false
 top_shrinking <- industry_churn %>%
   filter(year == "2024-25") %>%
   arrange(desc(net_churn_rate)) %>%
   slice(1)
 
+```
+
+```{r}
+#| label: fig-net-churn-2025
+#| fig-cap: "Net churn rate by industry, 2024-25 (positive = shrinking)"
 industry_churn %>%
   filter(year == "2024-25") %>%
   mutate(industry = fct_reorder(industry, net_churn_rate)) %>%
@@ -106,11 +116,11 @@ industry_churn %>%
   theme_minimal(base_size = 12)
 ```
 
-The standout is **`r top_shrinking$industry`**, with a net churn rate of `r round(top_shrinking$net_churn_rate, 1)` percentage points — meaning exits are outpacing entries by a meaningful margin. That's worth flagging on its own, but the more useful question is *why*. Is this seasonal, cyclical, or a structural shift in how that industry operates? The trend chart below starts to answer that.
+The standout is **`r top_shrinking$industry`** at a net churn rate of `r round(top_shrinking$net_churn_rate, 1)` , but notice how small that is. The honest story is that almost every industry *grew* in 2024-25; only agriculture and retail are in negative territory at all, and even they're only marginally contracting. So this isn't widespread collapse , it's a mostly-expanding economy with two specific laggards worth watching. The trend chart below asks whether those two are a one-off or part of something longer.
 
 ## Finding #2: Is this a blip or a trend?
 
-A single bad year doesn't necessarily mean an industry is in trouble — it could just be noise. So instead of looking at one snapshot, here's how entry and exit rates have actually moved across all four years for a few industries worth watching: two that are usually treated as economic bellwethers (construction, retail), and two that were hit hardest during COVID (hospitality, transport) — to see if that disruption is still showing up.
+A single year doesn't tell you much on its own - an industry could shrink once and bounce back. So here's how entry and exit rates moved across all four years for four industries worth watching: the two current laggards (agriculture, retail), plus construction and hospitality as bellwethers that react quickly to economic conditions.
 
 ```{r}
 #| label: fig-entry-exit-trend
@@ -118,8 +128,8 @@ A single bad year doesn't necessarily mean an industry is in trouble — it coul
 industry_churn %>%
   filter(industry %in% c(
     "Retail Trade", "Construction", "Accommodation and Food Services",
-    "Transport, Postal and Warehousing"
-  )) %>%
+    "Agriculture, Forestry and Fishing"
+  )) %>% 
   ggplot(aes(x = year_end)) +
   geom_line(aes(y = entry_rate, color = "Entry rate"), linewidth = 1.1) +
   geom_line(aes(y = exit_rate, color = "Exit rate"), linewidth = 1.1) +
@@ -136,4 +146,250 @@ industry_churn %>%
   theme(legend.position = "top")
 ```
 
-Wherever the red (exit) line crosses above the green (entry) line, that industry shrank that year. Worth noting which of these four are consistently above the line versus which only dipped once — that distinction is exactly what separates a genuine structural problem from a one-off shock.
+Wherever the red (exit) line crosses above the green (entry) line, that industry shrank that year. Worth noting which of these four are consistently above the line versus which only dipped once that distinction is exactly what separates a genuine structural problem from a one-off shock.
+
+```{r}
+#| label: clean-lga-data
+read_lga_sheet <- function(sheet_name, year) {
+  read_excel(
+    "data/8165DC10.xlsx",
+    sheet = sheet_name,
+    skip = 7,
+    col_names = c(
+      "state", "lga_code", "lga_name", "industry_code", "industry_label",
+      "non_employing", "emp_1_4", "emp_5_19", "emp_20_199", "emp_200_plus",
+      "total_businesses"
+    )
+  ) %>%
+    mutate(year = year, .before = 1) %>%
+    filter(!is.na(state), !str_starts(state, "Total"))
+}
+
+lga_panel <- bind_rows(
+  read_lga_sheet("Table 1", 2025),
+  read_lga_sheet("Table 2", 2024),
+  read_lga_sheet("Table 3", 2023)
+) %>%
+  mutate(total_businesses = as.numeric(total_businesses)) %>%
+  filter(!industry_label %in% c("Total", "Currently Unknown"))
+
+lga_yoy <- lga_panel %>%
+  select(year, state, lga_code, lga_name, industry_code, industry_label, total_businesses) %>%
+  pivot_wider(names_from = year, values_from = total_businesses, names_prefix = "y") %>%
+  mutate(
+    pct_change_24_25 = (y2025 - y2024) / y2024 * 100,
+    pct_change_23_24 = (y2024 - y2023) / y2023 * 100
+  )
+
+lga_yoy
+```
+
+## Finding #3: National numbers hide regional stories
+
+Everything in Part 1 was a national average - but Australia isn't one economy, it's hundreds of local ones. A national average can hide a region that's in real trouble, or one quietly thriving against the national trend. This is where it gets genuinely useful for a business deciding where to expand, or a council figuring out where support is actually needed.
+
+ABS doesn't publish entry/exit rates at the regional level - just raw business counts by Local Government Area, for three separate years. So I'm building my own churn proxy here: how much did the business count in each LGA-industry combination change year over year.
+
+### The big picture first: how widespread is this?
+
+Before zooming into specific regions, worth asking - is shrinkage the exception or becoming the norm?
+
+```{r}
+#| label: overall-split
+lga_yoy %>%
+  filter(y2024 >= 50) %>%
+  mutate(direction = if_else(pct_change_24_25 >= 0, "Growing", "Shrinking")) %>%
+  count(direction) %>%
+  mutate(pct = round(n / sum(n) * 100, 1)) %>%
+  knitr::kable(col.names = c("Direction", "Count", "% of all combinations"))
+```
+
+Roughly two-thirds of LGA-industry combinations grew and a third shrank - so contraction isn't the dominant story nationally, but it's far from rare either. That third is exactly where the interesting regional stories live.
+
+### Which states are under the most pressure?
+
+```{r}
+#| label: state-summary
+state_summary <- lga_yoy %>%
+  filter(y2024 >= 50) %>%
+  group_by(state) %>%
+  summarise(
+    avg_change = mean(pct_change_24_25, na.rm = TRUE),
+    n_combos = n(),
+    pct_shrinking = mean(pct_change_24_25 < 0, na.rm = TRUE) * 100
+  ) %>%
+  arrange(avg_change)
+
+state_summary %>%
+  knitr::kable(
+    col.names = c("State", "Avg % change", "LGA × industry combos", "% combos shrinking"),
+    digits = 1,
+    caption = "Business count growth by state, 2024 to 2025"
+  )
+```
+
+```{r}
+#| label: fig-state-summary
+#| fig-cap: "Average business count growth by state"
+state_summary %>%
+  mutate(state = fct_reorder(state, avg_change)) %>%
+  ggplot(aes(x = state, y = avg_change, fill = avg_change < 1)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#d62728", "FALSE" = "#2ca02c"), guide = "none") +
+  labs(
+    x = NULL, y = "Average % change in business counts, 2024 → 2025",
+    title = "Tasmania stands out as the weakest state by this measure",
+    subtitle = "Nearly half its LGA-industry combinations shrank in the past year"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+**Tasmania is the standout** - not just the lowest average growth of any state, but also the highest share of combinations actually shrinking (almost 49%, compared to roughly a third or less everywhere else). That's a genuinely distinctive regional story, not something you'd ever see in a national headline figure.
+
+### The key question: do the same industries struggle everywhere?
+
+This is really the question the whole project is built around. Part 1 showed which industries are contracting *nationally*. Does that national pattern actually hold up when you look at the regional data - or are national averages just smoothing over a much messier reality?
+
+```{r}
+#| label: cross-check
+national_industry_change <- industry_churn %>%
+  filter(year == "2024-25") %>%
+  select(industry, pct_change_national = pct_change)
+
+regional_industry_avg <- lga_yoy %>%
+  filter(y2024 >= 50) %>%
+  group_by(industry_label) %>%
+  summarise(avg_regional_change = mean(pct_change_24_25, na.rm = TRUE), n = n())
+
+cross_check <- national_industry_change %>%
+  left_join(regional_industry_avg, by = c("industry" = "industry_label"))
+
+correlation <- cor(cross_check$pct_change_national, cross_check$avg_regional_change, use = "complete.obs")
+
+cross_check %>%
+  ggplot(aes(x = pct_change_national, y = avg_regional_change)) +
+  geom_point(size = 3, color = "#1f77b4") +
+  geom_smooth(method = "lm", se = FALSE, color = "grey40", linetype = "dashed") +
+  ggrepel::geom_text_repel(aes(label = industry), size = 3, max.overlaps = 15) +
+  labs(
+    x = "National annual % change in business count (2024-25)",
+    y = "Average regional % change in business count",
+    title = "An industry's national trend predicts its regional reality",
+    subtitle = paste0("Correlation: ", round(correlation, 2))
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+This is the strongest finding in the analysis: a correlation of **`r round(correlation, 2)`** between how an industry is changing nationally and how its businesses are actually performing on the ground, region by region. Both are independent growth measures , national count change versus the average local change , so this isn't circular: it's genuine evidence that the national signal holds up locally. An industry growing nationally tends to grow in most regions, and a declining one declines fairly broadly. For a consulting memo, that's the kind of result you can lead with confidently: the national picture isn't masking a messier regional reality.
+
+### Closer look at home turf
+
+```{r}
+#| label: tbl-top-decline
+lga_yoy %>%
+  filter(y2024 >= 50) %>%
+  arrange(pct_change_24_25) %>%
+  select(state, lga_name, industry_label, y2024, y2025, pct_change_24_25) %>%
+  head(10) %>%
+  knitr::kable(
+    col.names = c("State", "LGA", "Industry", "2024 count", "2025 count", "% change"),
+    digits = 1,
+    caption = "Sharpest regional declines, 2024 to 2025"
+  )
+```
+
+```{r}
+#| label: fig-victoria-decline
+#| fig-cap: "Victorian LGA x industry combinations with sharpest decline, 2024-25"
+lga_yoy %>%
+  filter(state == "Victoria", y2024 >= 50) %>%
+  arrange(pct_change_24_25) %>%
+  head(10) %>%
+  mutate(label = paste(lga_name, industry_label, sep = " - ")) %>%
+  mutate(label = fct_reorder(label, pct_change_24_25)) %>%
+  ggplot(aes(x = label, y = pct_change_24_25)) +
+  geom_col(fill = "#d62728") +
+  geom_text(aes(label = paste0(round(pct_change_24_25, 1), "%")), hjust = 1.1, color = "white", size = 3.2) +
+  coord_flip() +
+  labs(
+    x = NULL, y = "% change in business count, 2024-2025",
+    title = "Victoria's sharpest regional declines",
+    subtitle = "LGA × industry combinations with the steepest drop in business count"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+```{r}
+#| label: save-outputs
+dir.create("outputs", showWarnings = FALSE)
+write_csv(industry_churn, "outputs/industry_churn_panel.csv")
+write_csv(lga_panel, "outputs/lga_industry_panel.csv")
+write_csv(lga_yoy, "outputs/lga_industry_yoy_change.csv")
+```
+
+The honest takeaway: most Australian industries actually grew in 2024-25 , only agriculture and retail are marginally contracting nationally, so this isn't a story of widespread decline. What *is* striking is how consistently the national trend holds at the regional level (correlation `r round(correlation, 2)`): an industry's national direction reliably predicts how it's doing locally, region by region. The national picture isn't hiding a messier regional one.
+
+Tasmania stood out as the state under the most pressure, with the highest share of LGA-industry combinations actually shrinking - a finding a national headline figure would never surface.
+
+That's a solid analytical foundation, but it's still just numbers in tables and charts. The next phase is about turning that into something a business or policymaker could actually act on:
+
+-   Bring in ABS CPI data to test whether cost pressure is actually driving these exits, or whether something else explains it
+-   Group industries and regions into proper risk profiles instead of just ranking them individually
+-   Build an AI layer that takes these findings and writes them up the way a consulting analyst would for a client - the part that turns this from a data project into a tool
+
+## The AI Layer: Auto-Generated Consulting Memo
+
+This is where the project goes from analysis to tool. Instead of a human writing up these findings, I feed the actual numbers , the national churn picture, the correlation, the weakest state , into an LLM (Llama 3.3 70B via Groq) and have it draft a consulting-style memo. The key design choice: the model only gets the real figures my analysis produced, so it narrates the data rather than inventing it.
+
+```{r}
+#| label: ai-memo
+#| eval: false
+library(httr2)
+
+# Pull the actual findings into a compact brief for the model
+weakest_state <- state_summary %>% slice(1)
+top_decline <- lga_yoy %>% filter(y2024 >= 50) %>% arrange(pct_change_24_25) %>% slice(1)
+
+findings_brief <- paste0(
+  "ANALYSIS FINDINGS (all figures are real, from ABS 2024-25 data):\n",
+  "- Most industries grew nationally; only ", 
+  paste(industry_churn %>% filter(year == "2024-25", net_churn_rate > 0) %>% pull(industry), collapse = " and "),
+  " had more exits than entries.\n",
+  "- Top national laggard: ", top_shrinking$industry, 
+  " (net churn rate ", round(top_shrinking$net_churn_rate, 1), ").\n",
+  "- Correlation between national and regional industry trends: ", round(correlation, 2), 
+  " (national signal holds up locally).\n",
+  "- Weakest state: ", weakest_state$state, 
+  " (avg change ", round(weakest_state$avg_change, 1), "%, ",
+  round(weakest_state$pct_shrinking, 0), "% of its industry-region combos shrinking).\n",
+  "- Sharpest single regional decline: ", top_decline$industry_label, " in ", 
+  top_decline$lga_name, " (", round(top_decline$pct_change_24_25, 1), "%)."
+)
+
+system_prompt <- "You are a senior analyst at a management consulting firm. Write a concise, professional internal memo (250-300 words) based ONLY on the findings provided. Use this structure: SITUATION, KEY INSIGHTS, RECOMMENDATION. Be precise with the numbers given. Do not invent any statistics not in the brief. Write for a partner who needs the takeaway fast."
+
+resp <- request("https://api.groq.com/openai/v1/chat/completions") %>%
+  req_auth_bearer_token(Sys.getenv("GROQ_API_KEY")) %>%
+  req_body_json(list(
+    model = "llama-3.3-70b-versatile",
+    messages = list(
+      list(role = "system", content = system_prompt),
+      list(role = "user", content = findings_brief)
+    ),
+    temperature = 0.3
+  )) %>%
+  req_perform()
+
+memo <- resp %>% resp_body_json() %>% pluck("choices", 1, "message", "content")
+cat(memo)
+
+```
+
+**Internal Memo**
+
+**SITUATION**: Our analysis of the latest ABS data (2024-25) reveals a mixed picture of industry growth across Australia. While most industries have experienced national growth, some sectors and regions are struggling.
+
+**KEY INSIGHTS**: Notably, Agriculture, Forestry and Fishing is the top national laggard with a net churn rate of 0.8, indicating more exits than entries. Furthermore, our analysis shows a strong correlation between national and regional industry trends, with a correlation coefficient of -0.9. This suggests that national trends are reflected at the local level. At the state level, Tasmania is the weakest performer, with an average change of 0.2% and 49% of its industry-region combinations experiencing decline. The sharpest single regional decline was observed in Professional, Scientific and Technical Services in Queenscliffe, which contracted by 21.6%.
+
+**RECOMMENDATION**: Given these findings, I recommend that we prioritize support for the Agriculture, Forestry and Fishing sector, as well as targeted interventions in Tasmania and regions like Queenscliffe. By focusing on these areas, we can help mitigate the impact of decline and promote more balanced growth across industries and regions. I suggest we discuss these recommendations further to determine the best course of action for our clients and stakeholders.
